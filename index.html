@@ -696,6 +696,9 @@
           <input type="checkbox" id="gcal-skip-off" checked style="width:auto" />
           쉬는 날(비번·휴무)은 일정 만들지 않기
         </label>
+        <div class="backup-row" style="margin-top:8px">
+          <button type="button" id="btn-gcal-reset">🔁 캘린더 계정 바꾸기</button>
+        </div>
       </div>
 
       <div class="form-group">
@@ -1392,11 +1395,16 @@
       return { created, removed, failed, firstError, total: days.length };
     }
 
+    document.getElementById('btn-gcal-reset').addEventListener('click', async () => {
+      if (window.resetCalendarAccount) await window.resetCalendarAccount();
+      alert('다음에 📆 버튼을 누르면 캘린더에 넣을 구글 계정을 다시 고를 수 있습니다.');
+    });
+
     let gcalBusy = false;
     document.getElementById('btn-gcal').addEventListener('click', async () => {
       if (gcalBusy) return;
       if (!window.getCalendarToken) {
-        alert('먼저 🔐 구글 로그인을 해주세요.');
+        alert('먼저 🔐 구글 로그인을 해주세요. (Firebase 설정이 필요합니다)');
         return;
       }
       const btn = document.getElementById('btn-gcal');
@@ -1408,8 +1416,7 @@
         try {
           token = await window.getCalendarToken();
         } catch (e) {
-          if (e.message === 'NOT_LOGGED_IN') alert('먼저 🔐 구글 로그인을 해주세요.');
-          else if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') { /* 사용자가 닫음 */ }
+          if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') { /* 사용자가 닫음 */ }
           else if (e.code === 'auth/popup-blocked') alert('팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 눌러주세요.');
           else alert('구글 캘린더 권한을 받지 못했습니다.\n' + (e.code || e.message));
           return;
@@ -1422,7 +1429,7 @@
           btn.textContent = `반영 중… ${Math.round((done / total) * 100)}%`;
         });
 
-        let msg = `구글 캘린더 반영 완료\n일정 ${result.created}개 등록·수정, ${result.removed}개 삭제`;
+        let msg = `구글 캘린더 반영 완료${window.calendarAccountEmail ? ' (' + window.calendarAccountEmail + ')' : ''}\n일정 ${result.created}개 등록·수정, ${result.removed}개 삭제`;
         if (result.failed) msg += `\n실패 ${result.failed}개: ${result.firstError}`;
         alert(msg);
       } catch (e) {
@@ -1447,7 +1454,7 @@
   <!-- Firebase 구글 로그인 + 클라우드 동기화 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, reauthenticateWithPopup, signOut, onAuthStateChanged }
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged }
       from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
     import { initializeFirestore, persistentLocalCache, doc, setDoc, onSnapshot }
       from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
@@ -1477,22 +1484,31 @@
 
       let ref = null, unsub = null, timer = null;
 
-      // 구글 캘린더용 임시 권한(약 1시간 유효). 버튼을 누를 때만 요청함
+      // 구글 캘린더용 임시 권한(약 1시간 유효). 메인 로그인과 별개의 인증 인스턴스를 써서
+      // 다른 구글 계정을 골라도 근무표 로그인 계정은 바뀌지 않음
+      const calApp = initializeApp(firebaseConfig, 'calendar');
+      const calAuth = getAuth(calApp);
       let calToken = null, calTokenAt = 0;
+      window.calendarAccountEmail = '';
       window.getCalendarToken = async () => {
-        if (!auth.currentUser) throw new Error('NOT_LOGGED_IN');
         if (calToken && Date.now() - calTokenAt < 50 * 60 * 1000) return calToken;
         const provider = new GoogleAuthProvider();
         provider.addScope('https://www.googleapis.com/auth/calendar.events');
-        if (auth.currentUser.email) provider.setCustomParameters({ login_hint: auth.currentUser.email });
-        const result = await reauthenticateWithPopup(auth.currentUser, provider);
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const result = await signInWithPopup(calAuth, provider);
         const cred = GoogleAuthProvider.credentialFromResult(result);
         if (!cred || !cred.accessToken) throw new Error('NO_TOKEN');
         calToken = cred.accessToken;
         calTokenAt = Date.now();
+        window.calendarAccountEmail = (result.user && result.user.email) || '';
         return calToken;
       };
       window.clearCalendarToken = () => { calToken = null; };
+      window.resetCalendarAccount = async () => {
+        calToken = null;
+        window.calendarAccountEmail = '';
+        try { await signOut(calAuth); } catch (e) {}
+      };
 
       // 앱에서 저장할 때마다 호출됨 (0.4초 모아서 업로드)
       window.onStateSaved = (s) => {
