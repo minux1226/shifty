@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>스마트 근무표</title>
+
+  <!-- PWA / Standalone App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="스마트 근무표" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#2563eb" id="meta-theme-color" />
+  <link rel="manifest" id="pwa-manifest" />
+  <link rel="apple-touch-icon" id="apple-touch-icon" />
+
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --day-bg: #ffedd5;
+      --day-text: #c2410c;
+      --night-bg: #2563eb;
+      --night-text: #ffffff;
+      --off-bg: #dcfce7;
+      --off-text: #15803d;
+      --holiday-bg: #1e293b;
+      --holiday-text: #f8fafc;
+      --leave-bg: #fef3c7;
+      --leave-text: #92400e;
+      --extra-bg: #f3e8ff;
+      --extra-text: #6b21a8;
+      --today-ring: #2563eb;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    body.dark {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #60a5fa;
+      --day-bg: #7c2d12;
+      --day-text: #fed7aa;
+      --night-bg: #3b82f6;
+      --night-text: #ffffff;
+      --off-bg: #14532d;
+      --off-text: #bbf7d0;
+      --holiday-bg: #090d16;
+      --holiday-text: #f1f5f9;
+      --leave-bg: #78350f;
+      --leave-text: #fde68a;
+      --extra-bg: #581c87;
+      --extra-text: #e9d5ff;
+      --today-ring: #60a5fa;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: calc(24px + env(safe-area-inset-bottom));
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Install Banner */
+    .install-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--primary);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+    }
+    .install-banner.show {
+      display: flex;
+    }
+    .install-banner button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .title-group h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-group p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .sync-status { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+
+    button:hover {
+      background: var(--surface-2);
+    }
+
+    button.primary {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    button.primary:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    /* Navigation & View Controls */
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .month-nav h2 {
+      margin: 0;
+      font-size: 17px;
+      min-width: 105px;
+      text-align: center;
+    }
+
+    .view-toggle {
+      display: flex;
+      background: var(--surface-2);
+      padding: 3px;
+      border-radius: 8px;
+    }
+
+    .view-toggle button {
+      border: none;
+      background: transparent;
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .view-toggle button.active {
+      background: var(--surface);
+      color: var(--primary);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Calendar Grid */
+    .calendar-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .weekdays div {
+      padding: 10px 4px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .weekdays div:first-child {
+      color: #ef4444;
+    }
+
+    .weekdays div:last-child {
+      color: #3b82f6;
+    }
+
+    .days-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+
+    .day-cell {
+      min-height: 82px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: background 0.12s;
+      position: relative;
+    }
+
+    .day-cell:nth-child(7n) {
+      border-right: none;
+    }
+
+    .day-cell:hover {
+      background: var(--surface-2);
+    }
+
+    .day-cell.other-month {
+      opacity: 0.38;
+    }
+
+    .day-cell.today {
+      box-shadow: inset 0 0 0 2px var(--today-ring);
+    }
+
+    .day-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .day-cell:nth-child(7n + 1) .day-num {
+      color: #ef4444;
+    }
+
+    .day-cell:nth-child(7n) .day-num {
+      color: #3b82f6;
+    }
+
+    .day-cell.holiday .day-num {
+      color: #ef4444;
+    }
+
+    .holiday-name {
+      font-size: 10px;
+      font-weight: 700;
+      color: #ef4444;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .list-holiday {
+      font-size: 11px;
+      font-weight: 700;
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.12);
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+
+    .override-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #f59e0b;
+    }
+
+    .shift-badge {
+      display: inline-block;
+      padding: 3px 6px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .shift-주 { background: var(--day-bg); color: var(--day-text); }
+    .shift-야 { background: var(--night-bg); color: var(--night-text); }
+    .shift-비 { background: var(--off-bg); color: var(--off-text); }
+    .shift-휴 { background: var(--holiday-bg); color: var(--holiday-text); }
+    .shift-연 { background: var(--leave-bg); color: var(--leave-text); }
+    .shift-특 { background: var(--extra-bg); color: var(--extra-text); }
+
+    .memo-preview {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    /* List View */
+    .list-view {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+
+    .list-item.today {
+      border-color: var(--today-ring);
+      border-width: 2px;
+    }
+
+    .list-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .list-date {
+      font-weight: 700;
+      font-size: 14px;
+      min-width: 82px;
+    }
+
+    .list-memo {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 440px;
+      padding: 20px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal h3 {
+      margin: 0 0 14px;
+      font-size: 17px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="date"],
+    input[type="text"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .preset-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .preset-buttons button {
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+
+    .pattern-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 38px;
+      padding: 8px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .shift-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .shift-option {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .shift-option.selected {
+      outline: 2px solid var(--primary);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .backup-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .backup-row button {
+      flex: 1;
+      font-size: 12px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 12px;
+      }
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .day-cell {
+        min-height: 68px;
+        padding: 4px;
+      }
+      .shift-badge {
+        font-size: 10px;
+        padding: 2px 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Install Hint Banner -->
+    <div class="install-banner" id="install-banner">
+      <span>📲 <strong>앱처럼 쓰기:</strong> 브라우저 메뉴에서 <strong>'홈 화면에 추가'</strong>를 누르면 상단 바 없이 바로 열립니다.</span>
+      <button type="button" id="close-banner" aria-label="닫기">×</button>
+    </div>
+
+    <header>
+      <div class="title-group">
+        <h1>📅 스마트 근무표</h1>
+        <p id="sync-status" class="sync-status"></p>
+        <p id="pattern-summary">현재 패턴: 주 · 주 · 야 · 야 · 비 · 비</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="btn-open-pattern" class="primary">⚙️ 근무 패턴 설정</button>
+        <button type="button" id="btn-login">🔐 구글 로그인</button>
+        <button type="button" id="btn-dark-mode">🌙 다크모드</button>
+      </div>
+    </header>
+
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">주간 근무</div>
+        <div class="stat-value" id="stat-day">0일</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">야간 근무</div>
+        <div class="stat-value" id="stat-night">0일</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">비번 / 휴무</div>
+        <div class="stat-value" id="stat-off">0일</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">총 근무시간</div>
+        <div class="stat-value" id="stat-hours">0h</div>
+      </div>
+    </section>
+
+    <section class="controls-bar">
+      <div class="month-nav">
+        <button type="button" id="btn-prev-month">◀</button>
+        <h2 id="current-month-label">2026년 11월</h2>
+        <button type="button" id="btn-next-month">▶</button>
+        <button type="button" id="btn-today">오늘</button>
+      </div>
+      <div class="view-toggle">
+        <button type="button" id="btn-view-cal" class="active">달력형</button>
+        <button type="button" id="btn-view-list">목록형</button>
+      </div>
+    </section>
+
+    <section class="calendar-card" id="calendar-view">
+      <div class="weekdays">
+        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+      </div>
+      <div class="days-grid" id="days-grid"></div>
+    </section>
+
+    <section class="list-view" id="list-view"></section>
+  </div>
+
+  <!-- Pattern Settings Modal -->
+  <div class="modal-backdrop" id="pattern-modal">
+    <div class="modal">
+      <h3>⚙️ 교대 근무 패턴 및 백업 설정</h3>
+
+      <div class="form-group">
+        <label for="anchor-date">패턴 시작 기준일 (1일차 날짜)</label>
+        <input type="date" id="anchor-date" />
+      </div>
+
+      <div class="form-group">
+        <label>자주 쓰는 근무 프리셋</label>
+        <div class="preset-buttons">
+          <button type="button" data-preset="주,주,야,야,비,비">주주야야비비 (6일)</button>
+          <button type="button" data-preset="주,야,비,휴">주야비휴 (4일)</button>
+          <button type="button" data-preset="주,주,주,비,야,야,야,비">3조2교대 (8일)</button>
+          <button type="button" data-preset="주,주,주,주,주,휴,휴">주5일제 (7일)</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>현재 순환 주기 (클릭하면 삭제)</label>
+        <div class="pattern-chips" id="pattern-chips"></div>
+        <div class="preset-buttons">
+          <button type="button" class="add-shift-btn" data-add="주">+ 주간</button>
+          <button type="button" class="add-shift-btn" data-add="야">+ 야간</button>
+          <button type="button" class="add-shift-btn" data-add="비">+ 비번</button>
+          <button type="button" class="add-shift-btn" data-add="휴">+ 휴무</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>데이터 백업 및 복원 (JSON)</label>
+        <div class="backup-row">
+          <button type="button" id="btn-export-json">📤 파일로 백업</button>
+          <button type="button" id="btn-import-json">📥 백업 불러오기</button>
+          <input type="file" id="import-file-input" accept=".json" style="display:none" />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-close-pattern">취소</button>
+        <button type="button" id="btn-save-pattern" class="primary">저장하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day Edit Modal -->
+  <div class="modal-backdrop" id="day-modal">
+    <div class="modal">
+      <h3 id="day-modal-title">2026년 11월 24일</h3>
+
+      <div class="form-group">
+        <label>근무 형태 변경</label>
+        <div class="shift-selector" id="shift-selector">
+          <div class="shift-option shift-주" data-shift="주">주간</div>
+          <div class="shift-option shift-야" data-shift="야">야간</div>
+          <div class="shift-option shift-비" data-shift="비">비번</div>
+          <div class="shift-option shift-휴" data-shift="휴">휴무</div>
+          <div class="shift-option shift-연" data-shift="연">연차</div>
+          <div class="shift-option shift-특" data-shift="특">특근</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="day-memo">일정 / 메모</label>
+        <textarea id="day-memo" rows="3" placeholder="개인 약속, 교육, 근무 교대 메모 등을 입력하세요"></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-reset-day" style="margin-right:auto">기본패턴 복원</button>
+        <button type="button" id="btn-close-day">닫기</button>
+        <button type="button" id="btn-save-day" class="primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1. Dynamic PWA Manifest & Icon Generation
+    (function setupPWA() {
+      const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+        <rect width="512" height="512" rx="112" fill="#2563eb"/>
+        <rect x="88" y="116" width="336" height="308" rx="40" fill="#ffffff"/>
+        <rect x="88" y="116" width="336" height="84" rx="40" fill="#1d4ed8"/>
+        <rect x="88" y="160" width="336" height="40" fill="#1d4ed8"/>
+        <circle cx="176" cy="116" r="18" fill="#dbeafe"/>
+        <circle cx="336" cy="116" r="18" fill="#dbeafe"/>
+        <text x="256" y="335" font-family="sans-serif" font-size="132" font-weight="bold" fill="#1e293b" text-anchor="middle">근무</text>
+      </svg>`;
+      const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgIcon);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 180;
+      canvas.height = 180;
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = function () {
+        ctx.drawImage(img, 0, 0, 180, 180);
+        const pngUrl = canvas.toDataURL('image/png');
+        document.getElementById('apple-touch-icon').href = pngUrl;
+      };
+      img.src = svgUrl;
+
+      const manifest = {
+        name: '스마트 근무표',
+        short_name: '근무표',
+        start_url: '.',
+        display: 'standalone',
+        background_color: '#f8fafc',
+        theme_color: '#2563eb',
+        icons: [
+          { src: svgUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+        ]
+      };
+      const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
+
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const bannerDismissed = localStorage.getItem('hide_install_banner') === '1';
+      if (!isStandalone && !bannerDismissed) {
+        document.getElementById('install-banner').classList.add('show');
+      }
+      document.getElementById('close-banner').addEventListener('click', () => {
+        document.getElementById('install-banner').classList.remove('show');
+        localStorage.setItem('hide_install_banner', '1');
+      });
+    })();
+
+    // 2. State Management
+    const STORAGE_KEY = 'smart_shift_schedule_v1';
+    const SHIFT_NAMES = {
+      '주': '주간',
+      '야': '야간',
+      '비': '비번',
+      '휴': '휴무',
+      '연': '연차',
+      '특': '특근'
+    };
+
+    const today = new Date();
+    const formatYMD = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    let state = {
+      anchorDate: formatYMD(new Date(today.getFullYear(), today.getMonth(), 1)),
+      pattern: ['주', '주', '야', '야', '비', '비'],
+      overrides: {}, // { 'YYYY-MM-DD': '연' }
+      memos: {},     // { 'YYYY-MM-DD': '메모' }
+      darkMode: false
+    };
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved) {
+        state = { ...state, ...saved };
+        // 예전 버전 데이터에는 수정 시각이 없으므로 기준 시각을 부여
+        if (!state.updatedAt) state.updatedAt = Date.now();
+      }
+    } catch (e) {}
+
+    // sync=false 이면 기기별 설정(다크모드 등)만 저장하고 서버로는 보내지 않음
+    function saveState(sync = true) {
+      if (sync) state.updatedAt = Date.now();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (sync && window.onStateSaved) window.onStateSaved(state);
+    }
+
+    // 클라우드 동기화 모듈에서 사용하는 연결 함수
+    window.getLocalState = () => state;
+    window.applyRemoteState = (remote) => {
+      const darkMode = state.darkMode; // 다크모드는 기기별로 유지
+      state = { ...state, ...remote, darkMode };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      tempPattern = [...state.pattern];
+      applyTheme();
+      render();
+    };
+
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth();
+    let currentViewMode = 'calendar';
+    let tempPattern = [...state.pattern];
+    let selectedDateStr = null;
+    let selectedShift = null;
+
+    // 2.5 Korean Public Holidays (Lunar dates converted to solar for 2025-2027)
+    const KOREAN_HOLIDAYS = {
+      // 2025
+      '2025-01-01': '신정',
+      '2025-01-28': '설날 연휴',
+      '2025-01-29': '설날',
+      '2025-01-30': '설날 연휴',
+      '2025-03-01': '삼일절',
+      '2025-03-03': '대체공휴일',
+      '2025-05-05': '어린이날·부처님오신날',
+      '2025-05-06': '대체공휴일',
+      '2025-06-06': '현충일',
+      '2025-08-15': '광복절',
+      '2025-10-03': '개천절',
+      '2025-10-05': '추석 연휴',
+      '2025-10-06': '추석',
+      '2025-10-07': '추석 연휴',
+      '2025-10-08': '대체공휴일',
+      '2025-10-09': '한글날',
+      '2025-12-25': '성탄절',
+      // 2026
+      '2026-01-01': '신정',
+      '2026-02-16': '설날 연휴',
+      '2026-02-17': '설날',
+      '2026-02-18': '설날 연휴',
+      '2026-03-01': '삼일절',
+      '2026-03-02': '대체공휴일',
+      '2026-05-05': '어린이날',
+      '2026-05-24': '부처님오신날',
+      '2026-05-25': '대체공휴일',
+      '2026-06-06': '현충일',
+      '2026-08-15': '광복절',
+      '2026-08-17': '대체공휴일',
+      '2026-09-24': '추석 연휴',
+      '2026-09-25': '추석',
+      '2026-09-26': '추석 연휴',
+      '2026-10-03': '개천절',
+      '2026-10-05': '대체공휴일',
+      '2026-10-09': '한글날',
+      '2026-12-25': '성탄절',
+      // 2027
+      '2027-01-01': '신정',
+      '2027-02-06': '설날 연휴',
+      '2027-02-07': '설날',
+      '2027-02-08': '설날 연휴',
+      '2027-02-09': '대체공휴일',
+      '2027-03-01': '삼일절',
+      '2027-05-05': '어린이날',
+      '2027-05-13': '부처님오신날',
+      '2027-06-06': '현충일',
+      '2027-08-15': '광복절',
+      '2027-08-16': '대체공휴일',
+      '2027-09-14': '추석 연휴',
+      '2027-09-15': '추석',
+      '2027-09-16': '추석 연휴',
+      '2027-10-03': '개천절',
+      '2027-10-04': '대체공휴일',
+      '2027-10-09': '한글날',
+      '2027-10-11': '대체공휴일',
+      '2027-12-25': '성탄절'
+    };
+
+    function getHolidayName(dateStr) {
+      if (KOREAN_HOLIDAYS[dateStr]) return KOREAN_HOLIDAYS[dateStr];
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      const dow = dt.getUTCDay();
+      const weekOfMonth = Math.floor((d - 1) / 7) + 1;
+      if (m === 5 && dow === 0 && weekOfMonth === 2) return '어머니날/기념일';
+      return '';
+    }
+
+    // 3. Shift Calculation
+    function getAutoShift(dateStr) {
+      if (!state.pattern.length) return '휴';
+      const [ay, am, ad] = state.anchorDate.split('-').map(Number);
+      const [ty, tm, td] = dateStr.split('-').map(Number);
+      const anchorUtc = Date.UTC(ay, am - 1, ad);
+      const targetUtc = Date.UTC(ty, tm - 1, td);
+      const diffDays = Math.round((targetUtc - anchorUtc) / 86400000);
+      const len = state.pattern.length;
+      const idx = ((diffDays % len) + len) % len;
+      return state.pattern[idx];
+    }
+
+    function getFinalShift(dateStr) {
+      return state.overrides[dateStr] || getAutoShift(dateStr);
+    }
+
+    // 4. Render Functions
+    function applyTheme() {
+      document.body.classList.toggle('dark', state.darkMode);
+      document.getElementById('btn-dark-mode').textContent = state.darkMode ? '☀️ 라이트' : '🌙 다크모드';
+      document.getElementById('meta-theme-color').content = state.darkMode ? '#0f172a' : '#2563eb';
+    }
+
+    function render() {
+      applyTheme();
+      document.getElementById('pattern-summary').textContent =
+        `현재 패턴: ${state.pattern.join(' · ')} (기준일: ${state.anchorDate})`;
+      document.getElementById('current-month-label').textContent = `${viewYear}년 ${viewMonth + 1}월`;
+
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      let dayCount = 0, nightCount = 0, offCount = 0, hours = 0;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const sh = getFinalShift(dateStr);
+        if (sh === '주') { dayCount++; hours += 8; }
+        else if (sh === '야') { nightCount++; hours += 8; }
+        else if (sh === '특') { dayCount++; hours += 8; }
+        else { offCount++; }
+      }
+
+      document.getElementById('stat-day').textContent = `${dayCount}일`;
+      document.getElementById('stat-night').textContent = `${nightCount}일`;
+      document.getElementById('stat-off').textContent = `${offCount}일`;
+      document.getElementById('stat-hours').textContent = `${hours}h`;
+
+      renderCalendar();
+      renderList();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('days-grid');
+      grid.innerHTML = '';
+
+      const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+      const todayStr = formatYMD(today);
+
+      const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+      for (let i = 0; i < totalCells; i++) {
+        let cellYear = viewYear;
+        let cellMonth = viewMonth;
+        let cellDay = 0;
+        let isOther = false;
+
+        if (i < firstDay) {
+          isOther = true;
+          cellDay = prevMonthDays - firstDay + i + 1;
+          cellMonth = viewMonth - 1;
+          if (cellMonth < 0) { cellMonth = 11; cellYear--; }
+        } else if (i >= firstDay + daysInMonth) {
+          isOther = true;
+          cellDay = i - (firstDay + daysInMonth) + 1;
+          cellMonth = viewMonth + 1;
+          if (cellMonth > 11) { cellMonth = 0; cellYear++; }
+        } else {
+          cellDay = i - firstDay + 1;
+        }
+
+        const dateStr = `${cellYear}-${String(cellMonth + 1).padStart(2, '0')}-${String(cellDay).padStart(2, '0')}`;
+        const shift = getFinalShift(dateStr);
+        const memo = state.memos[dateStr] || '';
+        const holidayName = getHolidayName(dateStr);
+        const isOverride = Boolean(state.overrides[dateStr]);
+
+        const cell = document.createElement('div');
+        cell.className = 'day-cell' +
+          (isOther ? ' other-month' : '') +
+          (dateStr === todayStr ? ' today' : '') +
+          (holidayName ? ' holiday' : '');
+        cell.innerHTML = `
+          <div class="day-top">
+            <span class="day-num">${cellDay}</span>
+            ${isOverride ? '<span class="override-dot" title="개별 수정됨"></span>' : ''}
+          </div>
+          ${holidayName ? `<div class="holiday-name">${escapeHtml(holidayName)}</div>` : ''}
+          <span class="shift-badge shift-${shift}">${SHIFT_NAMES[shift] || shift}</span>
+          ${memo ? `<div class="memo-preview">${escapeHtml(memo)}</div>` : ''}
+        `;
+        cell.addEventListener('click', () => openDayModal(dateStr));
+        grid.appendChild(cell);
+      }
+    }
+
+    function renderList() {
+      const list = document.getElementById('list-view');
+      list.innerHTML = '';
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      const weekNames = ['일', '월', '화', '수', '목', '금', '토'];
+      const todayStr = formatYMD(today);
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dt = new Date(viewYear, viewMonth, d);
+        const dateStr = formatYMD(dt);
+        const shift = getFinalShift(dateStr);
+        const memo = state.memos[dateStr] || '';
+        const holidayName = getHolidayName(dateStr);
+
+        const item = document.createElement('div');
+        item.className = 'list-item' + (dateStr === todayStr ? ' today' : '');
+        item.innerHTML = `
+          <div class="list-left">
+            <span class="list-date" style="${holidayName ? 'color:#ef4444;' : ''}">${viewMonth + 1}/${d} (${weekNames[dt.getDay()]})</span>
+            ${holidayName ? `<span class="list-holiday">${escapeHtml(holidayName)}</span>` : ''}
+            <span class="shift-badge shift-${shift}">${SHIFT_NAMES[shift] || shift}</span>
+            <span class="list-memo">${escapeHtml(memo)}</span>
+          </div>
+          <span style="color:var(--text-muted);font-size:12px;">수정 ›</span>
+        `;
+        item.addEventListener('click', () => openDayModal(dateStr));
+        list.appendChild(item);
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    // 5. Pattern Modal Events
+    function renderPatternChips() {
+      const container = document.getElementById('pattern-chips');
+      container.innerHTML = '';
+      tempPattern.forEach((sh, idx) => {
+        const chip = document.createElement('span');
+        chip.className = `chip shift-${sh}`;
+        chip.textContent = `${sh} ×`;
+        chip.addEventListener('click', () => {
+          if (tempPattern.length > 1) {
+            tempPattern.splice(idx, 1);
+            renderPatternChips();
+          }
+        });
+        container.appendChild(chip);
+      });
+    }
+
+    document.getElementById('btn-open-pattern').addEventListener('click', () => {
+      document.getElementById('anchor-date').value = state.anchorDate;
+      tempPattern = [...state.pattern];
+      renderPatternChips();
+      document.getElementById('pattern-modal').classList.add('open');
+    });
+
+    document.getElementById('btn-close-pattern').addEventListener('click', () => {
+      document.getElementById('pattern-modal').classList.remove('open');
+    });
+
+    document.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tempPattern = btn.dataset.preset.split(',');
+        renderPatternChips();
+      });
+    });
+
+    document.querySelectorAll('.add-shift-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tempPattern.push(btn.dataset.add);
+        renderPatternChips();
+      });
+    });
+
+    document.getElementById('btn-save-pattern').addEventListener('click', () => {
+      const newAnchor = document.getElementById('anchor-date').value;
+      if (newAnchor) state.anchorDate = newAnchor;
+      if (tempPattern.length > 0) state.pattern = [...tempPattern];
+      saveState();
+      document.getElementById('pattern-modal').classList.remove('open');
+      render();
+    });
+
+    // 6. Day Edit Modal Events
+    function openDayModal(dateStr) {
+      selectedDateStr = dateStr;
+      selectedShift = getFinalShift(dateStr);
+      const holidayName = getHolidayName(dateStr);
+      document.getElementById('day-modal-title').textContent =
+        holidayName ? `${dateStr} (${holidayName}) 근무 및 일정` : `${dateStr} 근무 및 일정`;
+      document.getElementById('day-memo').value = state.memos[dateStr] || '';
+      updateShiftSelectorUI();
+      document.getElementById('day-modal').classList.add('open');
+    }
+
+    function updateShiftSelectorUI() {
+      document.querySelectorAll('.shift-option').forEach((opt) => {
+        opt.classList.toggle('selected', opt.dataset.shift === selectedShift);
+      });
+    }
+
+    document.querySelectorAll('.shift-option').forEach((opt) => {
+      opt.addEventListener('click', () => {
+        selectedShift = opt.dataset.shift;
+        updateShiftSelectorUI();
+      });
+    });
+
+    document.getElementById('btn-save-day').addEventListener('click', () => {
+      const autoSh = getAutoShift(selectedDateStr);
+      if (selectedShift === autoSh) {
+        delete state.overrides[selectedDateStr];
+      } else {
+        state.overrides[selectedDateStr] = selectedShift;
+      }
+      const memoText = document.getElementById('day-memo').value.trim();
+      if (memoText) {
+        state.memos[selectedDateStr] = memoText;
+      } else {
+        delete state.memos[selectedDateStr];
+      }
+      saveState();
+      document.getElementById('day-modal').classList.remove('open');
+      render();
+    });
+
+    document.getElementById('btn-reset-day').addEventListener('click', () => {
+      delete state.overrides[selectedDateStr];
+      delete state.memos[selectedDateStr];
+      saveState();
+      document.getElementById('day-modal').classList.remove('open');
+      render();
+    });
+
+    document.getElementById('btn-close-day').addEventListener('click', () => {
+      document.getElementById('day-modal').classList.remove('open');
+    });
+
+    // 7. Navigation & View Controls
+    document.getElementById('btn-prev-month').addEventListener('click', () => {
+      viewMonth--;
+      if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+      render();
+    });
+
+    document.getElementById('btn-next-month').addEventListener('click', () => {
+      viewMonth++;
+      if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+      render();
+    });
+
+    document.getElementById('btn-today').addEventListener('click', () => {
+      viewYear = today.getFullYear();
+      viewMonth = today.getMonth();
+      render();
+    });
+
+    document.getElementById('btn-dark-mode').addEventListener('click', () => {
+      state.darkMode = !state.darkMode;
+      saveState(false);
+      applyTheme();
+    });
+
+    document.getElementById('btn-view-cal').addEventListener('click', () => {
+      currentViewMode = 'calendar';
+      document.getElementById('btn-view-cal').classList.add('active');
+      document.getElementById('btn-view-list').classList.remove('active');
+      document.getElementById('calendar-view').style.display = 'block';
+      document.getElementById('list-view').style.display = 'none';
+    });
+
+    document.getElementById('btn-view-list').addEventListener('click', () => {
+      currentViewMode = 'list';
+      document.getElementById('btn-view-list').classList.add('active');
+      document.getElementById('btn-view-cal').classList.remove('active');
+      document.getElementById('calendar-view').style.display = 'none';
+      document.getElementById('list-view').style.display = 'flex';
+    });
+
+    // 8. Backup & Restore
+    document.getElementById('btn-export-json').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `근무표_백업_${formatYMD(new Date())}.json`;
+      a.click();
+    });
+
+    document.getElementById('btn-import-json').addEventListener('click', () => {
+      document.getElementById('import-file-input').click();
+    });
+
+    document.getElementById('import-file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const imported = JSON.parse(ev.target.result);
+          state = { ...state, ...imported };
+          saveState();
+          document.getElementById('pattern-modal').classList.remove('open');
+          render();
+          alert('백업 데이터를 성공적으로 불러왔습니다.');
+        } catch (err) {
+          alert('올바른 백업 파일이 아닙니다.');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    // Initial Render
+    render();
+  </script>
+
+  <!-- Firebase 구글 로그인 + 클라우드 동기화 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+    import { initializeFirestore, persistentLocalCache, doc, setDoc, onSnapshot }
+      from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+    // ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)에서 복사한 값으로 교체하세요 ▼▼▼
+    const firebaseConfig = {
+      apiKey: "AIzaSyDaZL_37L8zgLkVwxEzSmvsBKw3etS5ps0",
+      authDomain: "work-day-ee15a.firebaseapp.com",
+      projectId: "work-day-ee15a",
+      storageBucket: "work-day-ee15a.firebasestorage.app",
+      messagingSenderId: "1000460331675",
+      appId: "1:1000460331675:web:5db7aa9e3f3e40365df43e"
+    };
+    // ▲▲▲ ----------------------------------------------------------------- ▲▲▲
+
+    const btn = document.getElementById('btn-login');
+    const statusEl = document.getElementById('sync-status');
+    const setStatus = (t) => { statusEl.textContent = t; };
+
+    if (firebaseConfig.apiKey.startsWith('YOUR_')) {
+      btn.style.display = 'none';
+      setStatus('로컬 저장 모드 (Firebase 설정 전)');
+    } else {
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = initializeFirestore(app, { localCache: persistentLocalCache({}) });
+
+      let ref = null, unsub = null, timer = null;
+
+      // 앱에서 저장할 때마다 호출됨 (0.4초 모아서 업로드)
+      window.onStateSaved = (s) => {
+        if (!ref) return;
+        clearTimeout(timer);
+        setStatus('☁️ 저장 중…');
+        timer = setTimeout(async () => {
+          try {
+            await setDoc(ref, { state: JSON.stringify(s), updatedAt: s.updatedAt || 0 });
+            setStatus('☁️ 동기화됨');
+          } catch (e) {
+            console.error(e);
+            setStatus('⚠️ 동기화 실패 (인터넷/권한 확인)');
+          }
+        }, 400);
+      };
+
+      btn.addEventListener('click', async () => {
+        if (auth.currentUser) {
+          if (confirm('로그아웃할까요? (이 기기의 데이터는 그대로 남습니다)')) await signOut(auth);
+          return;
+        }
+        const provider = new GoogleAuthProvider();
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (e) {
+          if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+            await signInWithRedirect(auth, provider);
+          } else if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+            console.error(e);
+            alert('로그인에 실패했습니다: ' + e.code);
+          }
+        }
+      });
+
+      onAuthStateChanged(auth, (user) => {
+        if (unsub) { unsub(); unsub = null; }
+        if (!user) {
+          ref = null;
+          btn.textContent = '🔐 구글 로그인';
+          setStatus('로그인하면 폰·PC가 자동으로 동기화됩니다');
+          return;
+        }
+        ref = doc(db, 'users', user.uid);
+        btn.textContent = '로그아웃';
+        setStatus('☁️ 불러오는 중…');
+
+        unsub = onSnapshot(ref, (snap) => {
+          if (snap.metadata.hasPendingWrites) return; // 내가 방금 쓴 변경은 무시
+          const local = window.getLocalState();
+          if (!snap.exists()) {            // 첫 로그인: 이 기기 데이터를 올림
+            window.onStateSaved(local);
+            return;
+          }
+          const remote = snap.data();
+          const rt = remote.updatedAt || 0, lt = local.updatedAt || 0;
+          if (rt > lt) window.applyRemoteState(JSON.parse(remote.state));
+          else if (rt < lt) window.onStateSaved(local);
+          setStatus('☁️ 동기화됨 · ' + (user.email || ''));
+        }, (err) => {
+          console.error(err);
+          setStatus('⚠️ 동기화 오류 (Firestore 규칙/설정 확인)');
+        });
+      });
+    }
+  </script>
+</body>
+</html>
