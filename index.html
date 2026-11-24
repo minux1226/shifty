@@ -683,6 +683,23 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label>캘린더로 내보내기 (삼성·구글 캘린더용 .ics)</label>
+        <select id="ics-range">
+          <option value="1">이번 달</option>
+          <option value="3" selected>이번 달부터 3개월</option>
+          <option value="6">이번 달부터 6개월</option>
+          <option value="12">이번 달부터 1년</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:normal">
+          <input type="checkbox" id="ics-skip-off" checked style="width:auto" />
+          쉬는 날(비번·휴무)은 제외
+        </label>
+        <div class="backup-row" style="margin-top:8px">
+          <button type="button" id="btn-export-ics">📅 캘린더 파일 만들기</button>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button type="button" id="btn-close-pattern">취소</button>
         <button type="button" id="btn-save-pattern" class="primary">저장하기</button>
@@ -1225,6 +1242,58 @@
         }
       };
       reader.readAsText(file);
+    });
+
+    // 9. Calendar Export (.ics)
+    function icsEscape(t) {
+      return String(t)
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\r?\n/g, '\\n');
+    }
+
+    document.getElementById('btn-export-ics').addEventListener('click', () => {
+      const months = Number(document.getElementById('ics-range').value);
+      const skipOff = document.getElementById('ics-skip-off').checked;
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end = new Date(today.getFullYear(), today.getMonth() + months, 1);
+      const pad = (n) => String(n).padStart(2, '0');
+      const compact = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+      const now = new Date();
+      const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+
+      const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Smart Shift//KO', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:근무표'];
+      let count = 0;
+      for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+        const dateStr = formatYMD(d);
+        const shift = getFinalShift(dateStr);
+        if (skipOff && (shift === '비' || shift === '휴')) continue;
+        const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        const memo = state.memos[dateStr] || '';
+        lines.push(
+          'BEGIN:VEVENT',
+          `UID:${dateStr}@smart-shift`,
+          `DTSTAMP:${stamp}`,
+          `DTSTART;VALUE=DATE:${compact(d)}`,
+          `DTEND;VALUE=DATE:${compact(next)}`,
+          `SUMMARY:${icsEscape(SHIFT_NAMES[shift] || shift)}`
+        );
+        if (memo) lines.push(`DESCRIPTION:${icsEscape(memo)}`);
+        lines.push('TRANSP:TRANSPARENT', 'END:VEVENT');
+        count++;
+      }
+      lines.push('END:VCALENDAR');
+
+      if (!count) { alert('내보낼 일정이 없습니다.'); return; }
+      const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shift-calendar.ics';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      alert(`${count}개 일정 파일을 만들었습니다.\n다운로드된 .ics 파일을 눌러 삼성 캘린더로 열어주세요.`);
     });
 
     // Initial Render
