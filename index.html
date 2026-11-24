@@ -597,6 +597,7 @@
       <div class="header-actions">
         <button type="button" id="btn-open-pattern" class="primary">⚙️ 근무 패턴 설정</button>
         <button type="button" id="btn-login">🔐 구글 로그인</button>
+        <button type="button" id="btn-gcal">📆 구글 캘린더 반영</button>
         <button type="button" id="btn-dark-mode">🌙 다크모드</button>
       </div>
     </header>
@@ -681,6 +682,20 @@
           <button type="button" id="btn-import-json">📥 백업 불러오기</button>
           <input type="file" id="import-file-input" accept=".json" style="display:none" />
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>구글 캘린더 반영 설정 (위쪽 📆 버튼으로 실행)</label>
+        <select id="gcal-range">
+          <option value="1">이번 달</option>
+          <option value="3" selected>이번 달부터 3개월</option>
+          <option value="6">이번 달부터 6개월</option>
+          <option value="12">이번 달부터 1년</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:normal">
+          <input type="checkbox" id="gcal-skip-off" checked style="width:auto" />
+          쉬는 날(비번·휴무)은 일정 만들지 않기
+        </label>
       </div>
 
       <div class="form-group">
@@ -1296,6 +1311,135 @@
       alert(`${count}개 일정 파일을 만들었습니다.\n다운로드된 .ics 파일을 눌러 삼성 캘린더로 열어주세요.`);
     });
 
+    // 10. Google Calendar Sync (Calendar API)
+    const GCAL_BASE = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+
+    async function gcalRequest(token, method, url, body) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(url, {
+          method,
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined
+        });
+        if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+        const retryable = res.status === 429 || res.status >= 500;
+        let data = null;
+        if (res.status !== 204) { try { data = await res.json(); } catch (e) {} }
+        const reason = data && data.error && data.error.errors && data.error.errors[0] && data.error.errors[0].reason;
+        if (retryable || (res.status === 403 && /rateLimit|userRateLimit/i.test(reason || ''))) {
+          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+          continue;
+        }
+        return { status: res.status, ok: res.ok, data };
+      }
+      return { status: 0, ok: false, data: null };
+    }
+
+    async function syncToGoogleCalendar(token, months, skipOff, onProgress) {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end = new Date(today.getFullYear(), today.getMonth() + months, 1);
+      const days = [];
+      for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) days.push(formatYMD(d));
+
+      let done = 0, created = 0, removed = 0, failed = 0, firstError = '';
+
+      const worker = async (dateStr) => {
+        const shift = getFinalShift(dateStr);
+        const id = 'shift' + dateStr.replace(/-/g, '');
+        const wantEvent = !(skipOff && (shift === '비' || shift === '휴'));
+        let r;
+        if (wantEvent) {
+          const [y, m, dd] = dateStr.split('-').map(Number);
+          const body = {
+            id,
+            summary: SHIFT_NAMES[shift] || shift,
+            description: state.memos[dateStr] || '',
+            start: { date: dateStr },
+            end: { date: formatYMD(new Date(y, m - 1, dd + 1)) },
+            transparency: 'transparent',
+            extendedProperties: { private: { app: 'smart-shift' } }
+          };
+          r = await gcalRequest(token, 'PUT', `${GCAL_BASE}/${id}`, body);
+          if (!r.ok && (r.status === 404 || r.status === 410)) {
+            r = await gcalRequest(token, 'POST', GCAL_BASE, body);
+            if (r.status === 409) {
+              // 예전에 지운 같은 날짜 일정이 남아 있으면 되살림
+              r = await gcalRequest(token, 'PATCH', `${GCAL_BASE}/${id}`, { ...body, status: 'confirmed' });
+            }
+          }
+          if (r.ok) created++; else failed++;
+        } else {
+          r = await gcalRequest(token, 'DELETE', `${GCAL_BASE}/${id}`);
+          if (r.ok) removed++;
+          else if (r.status === 404 || r.status === 410) { /* 원래 없음 */ }
+          else failed++;
+        }
+        if (!r.ok && ![404, 410].includes(r.status) && !firstError) {
+          firstError = (r.data && r.data.error && r.data.error.message) || ('오류 코드 ' + r.status);
+        }
+        done++;
+        onProgress(done, days.length);
+      };
+
+      let cursor = 0;
+      const runners = Array.from({ length: 4 }, async () => {
+        while (cursor < days.length) {
+          const dateStr = days[cursor++];
+          await worker(dateStr);
+        }
+      });
+      await Promise.all(runners);
+      return { created, removed, failed, firstError, total: days.length };
+    }
+
+    let gcalBusy = false;
+    document.getElementById('btn-gcal').addEventListener('click', async () => {
+      if (gcalBusy) return;
+      if (!window.getCalendarToken) {
+        alert('먼저 🔐 구글 로그인을 해주세요.');
+        return;
+      }
+      const btn = document.getElementById('btn-gcal');
+      const label = btn.textContent;
+      gcalBusy = true;
+      btn.disabled = true;
+      try {
+        let token;
+        try {
+          token = await window.getCalendarToken();
+        } catch (e) {
+          if (e.message === 'NOT_LOGGED_IN') alert('먼저 🔐 구글 로그인을 해주세요.');
+          else if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') { /* 사용자가 닫음 */ }
+          else if (e.code === 'auth/popup-blocked') alert('팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 눌러주세요.');
+          else alert('구글 캘린더 권한을 받지 못했습니다.\n' + (e.code || e.message));
+          return;
+        }
+
+        const months = Number(document.getElementById('gcal-range').value);
+        const skipOff = document.getElementById('gcal-skip-off').checked;
+        btn.textContent = '반영 중… 0%';
+        const result = await syncToGoogleCalendar(token, months, skipOff, (done, total) => {
+          btn.textContent = `반영 중… ${Math.round((done / total) * 100)}%`;
+        });
+
+        let msg = `구글 캘린더 반영 완료\n일정 ${result.created}개 등록·수정, ${result.removed}개 삭제`;
+        if (result.failed) msg += `\n실패 ${result.failed}개: ${result.firstError}`;
+        alert(msg);
+      } catch (e) {
+        if (e.message === 'TOKEN_EXPIRED') {
+          if (window.clearCalendarToken) window.clearCalendarToken();
+          alert('구글 캘린더 권한이 만료되었습니다. 버튼을 한 번 더 눌러 다시 연결해주세요.');
+        } else {
+          console.error(e);
+          alert('반영 중 오류가 발생했습니다: ' + e.message);
+        }
+      } finally {
+        gcalBusy = false;
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+
     // Initial Render
     render();
   </script>
@@ -1303,7 +1447,7 @@
   <!-- Firebase 구글 로그인 + 클라우드 동기화 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged }
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, reauthenticateWithPopup, signOut, onAuthStateChanged }
       from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
     import { initializeFirestore, persistentLocalCache, doc, setDoc, onSnapshot }
       from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
@@ -1332,6 +1476,23 @@
       const db = initializeFirestore(app, { localCache: persistentLocalCache({}) });
 
       let ref = null, unsub = null, timer = null;
+
+      // 구글 캘린더용 임시 권한(약 1시간 유효). 버튼을 누를 때만 요청함
+      let calToken = null, calTokenAt = 0;
+      window.getCalendarToken = async () => {
+        if (!auth.currentUser) throw new Error('NOT_LOGGED_IN');
+        if (calToken && Date.now() - calTokenAt < 50 * 60 * 1000) return calToken;
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/calendar.events');
+        if (auth.currentUser.email) provider.setCustomParameters({ login_hint: auth.currentUser.email });
+        const result = await reauthenticateWithPopup(auth.currentUser, provider);
+        const cred = GoogleAuthProvider.credentialFromResult(result);
+        if (!cred || !cred.accessToken) throw new Error('NO_TOKEN');
+        calToken = cred.accessToken;
+        calTokenAt = Date.now();
+        return calToken;
+      };
+      window.clearCalendarToken = () => { calToken = null; };
 
       // 앱에서 저장할 때마다 호출됨 (0.4초 모아서 업로드)
       window.onStateSaved = (s) => {
